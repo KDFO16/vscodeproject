@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python app.py)",
+      "Bash(venv/Scripts/python -c \"import database; print\\('database.py OK'\\)\")",
+      "Bash(venv/Scripts/python -c \"import crawler; print\\('crawler.py OK'\\)\")",
+      "Bash(venv/Scripts/python -c \"import app; print\\('app.py OK'\\)\")",
+      "Bash(timeout 5 venv/Scripts/python app.py)",
+      "Bash(venv/Scripts/python app.py)",
+      "Bash(curl -s http://localhost:5000/api/stock/list)",
+      "Bash(curl -s http://localhost:5000/api/positions)",
+      "Bash(pkill -f \"python app.py\")",
+      "Bash(taskkill //F //IM python.exe)"
+    ]
+  }
+}
