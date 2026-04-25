@@ -708,6 +708,11 @@ header.top-bar {
     min-width: 50px;
 }
 
+/* 休市挂单价输入 */
+.off-hours-price-input {
+    width: 100px !important;
+}
+
 .trade-info {
     font-size: 12px;
 }

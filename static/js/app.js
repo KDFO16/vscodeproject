@@ -40,6 +40,7 @@ const app = createApp({
         // 交易相关
         const tradeDirection = ref('buy');
         const tradeVolume = ref(100);
+        const tradePrice = ref(0);  // 周末挂单价
         const orderResult = ref({ success: false, message: '' });
 
         // ECharts实例
@@ -79,14 +80,38 @@ const app = createApp({
         };
 
         // ==================== 计算属性 ====================
+        // 是否非交易时段（需要挂单价）：周末 + 工作日9:15前 + 工作日15:00后
+        const isOffHours = computed(() => {
+            const now = new Date();
+            const day = now.getDay();
+            const hours = now.getHours();
+            const minutes = now.getMinutes();
+            const time = hours * 60 + minutes;
+
+            // 周六(6)周日(0)全天休市
+            if (day === 0 || day === 6) return true;
+
+            // 工作日：9:15前(夜市委托) 或 15:00后(收盘后委托)
+            if (time < 9 * 60 + 15) return true;  // 9:15前
+            if (time >= 15 * 60) return true;     // 15:00后
+
+            return false;
+        });
+
         const estimatedAmount = computed(() => {
             if (!currentStock.value) return 0;
-            return tradeVolume.value * currentStock.value.current_price;
+            const price = isOffHours.value && tradePrice.value > 0 ? tradePrice.value : currentStock.value.current_price;
+            return tradeVolume.value * price;
         });
 
         const availableToTrade = computed(() => {
             if (!currentStock.value) return 0;
             if (tradeDirection.value === 'buy') {
+                const code = currentStock.value.stock_code;
+                if (isKCBStock(code)) {
+                    // 科创板：至少200股
+                    return Math.max(200, Math.floor(accountInfo.value.available_capital / currentStock.value.current_price));
+                }
                 return Math.floor(accountInfo.value.available_capital / currentStock.value.current_price / 100) * 100;
             } else {
                 return selectedPosition.value ? selectedPosition.value.available_volume : 0;
@@ -596,15 +621,44 @@ const app = createApp({
         };
 
         // ==================== 交易功能 ====================
+        // 判断是否为科创板股票
+        const isKCBStock = (code) => {
+            return code && code.startsWith('688');
+        };
+
+        // 判断是否可交易（买入）
+        const canBuyVolume = (code, volume) => {
+            if (!code || volume <= 0) return false;
+            if (isKCBStock(code)) {
+                return volume >= 200; // 科创板首次买入≥200股
+            }
+            return volume % 100 === 0; // 其他板块100的整数倍
+        };
+
+        // 调整交易数量
         const adjustVolume = (delta) => {
-            tradeVolume.value = Math.max(100, tradeVolume.value + delta);
-            tradeVolume.value = Math.floor(tradeVolume.value / 100) * 100;
+            const code = currentStock.value?.stock_code;
+            if (isKCBStock(code)) {
+                // 科创板：可1股递增
+                tradeVolume.value = Math.max(200, tradeVolume.value + delta);
+            } else {
+                // 其他板块：100的整数倍
+                tradeVolume.value = Math.max(100, tradeVolume.value + delta);
+                tradeVolume.value = Math.floor(tradeVolume.value / 100) * 100;
+            }
         };
 
         const setMaxVolume = () => {
             if (tradeDirection.value === 'buy') {
                 if (currentStock.value && currentStock.value.current_price > 0) {
-                    tradeVolume.value = Math.floor(accountInfo.value.available_capital / currentStock.value.current_price / 100) * 100;
+                    const code = currentStock.value.stock_code;
+                    let maxVol = Math.floor(accountInfo.value.available_capital / currentStock.value.current_price);
+                    if (isKCBStock(code)) {
+                        maxVol = Math.max(200, maxVol); // 科创板最少200
+                    } else {
+                        maxVol = Math.floor(maxVol / 100) * 100;
+                    }
+                    tradeVolume.value = maxVol;
                 }
             } else {
                 if (selectedPosition.value) {
@@ -616,16 +670,39 @@ const app = createApp({
         const submitOrder = async () => {
             if (!currentStock.value || !tradeVolume.value) return;
 
-            // 检查交易数量
-            if (tradeVolume.value % 100 !== 0) {
-                showToast('交易数量必须是100的整数倍', 'error');
-                return;
+            const code = currentStock.value.stock_code;
+
+            // 买入数量检查
+            if (tradeDirection.value === 'buy') {
+                if (isKCBStock(code)) {
+                    if (tradeVolume.value < 200) {
+                        showToast('科创板首次买入必须≥200股', 'error');
+                        return;
+                    }
+                } else {
+                    if (tradeVolume.value % 100 !== 0) {
+                        showToast('买入数量必须是100的整数倍', 'error');
+                        return;
+                    }
+                }
+            }
+
+            // 周末挂单检查
+            if (isOffHours.value) {
+                if (!tradePrice.value || tradePrice.value <= 0) {
+                    showToast('周末挂单必须输入价格', 'error');
+                    return;
+                }
+                if (tradePrice.value < currentStock.value.limit_down_price || tradePrice.value > currentStock.value.limit_up_price) {
+                    showToast(`挂单价必须在 [${currentStock.value.limit_down_price}, ${currentStock.value.limit_up_price}] 范围内`, 'error');
+                    return;
+                }
             }
 
             const orderData = {
-                stock_code: currentStock.value.stock_code,
+                stock_code: code,
                 direction: tradeDirection.value,
-                price: 0, // 市价
+                price: isOffHours.value ? tradePrice.value : 0, // 周末用挂单价
                 volume: tradeVolume.value
             };
 
@@ -643,7 +720,7 @@ const app = createApp({
 
                 // 如果是买入，刷新持仓
                 if (tradeDirection.value === 'buy') {
-                    const pos = positions.value.find(p => p.stock_code === currentStock.value.stock_code);
+                    const pos = positions.value.find(p => p.stock_code === code);
                     if (pos) {
                         selectedPosition.value = pos;
                     }
@@ -791,6 +868,8 @@ const app = createApp({
             selectedPosition,
             tradeDirection,
             tradeVolume,
+            tradePrice,
+            isOffHours,
             orderResult,
             chartRef,
 

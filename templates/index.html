@@ -302,11 +302,18 @@
                         <button class="btn btn-outline-warning btn-sm" @click="setMaxVolume">全仓</button>
                     </div>
 
+                    <!-- 休市挂单价输入 -->
+                    <div class="trade-price me-2" v-if="isOffHours">
+                        <input type="number" class="form-control form-control-sm text-center off-hours-price-input" v-model.number="tradePrice" placeholder="挂单价" step="0.01">
+                        <small class="text-muted">挂单价</small>
+                    </div>
+
                     <div class="trade-info me-3">
                         <span class="text-muted">可交易：</span>
                         <span class="text-info">{{ availableToTrade }}股</span>
                         <span class="text-muted ms-2">金额：</span>
                         <span :class="tradeDirection === 'buy' ? 'text-danger' : 'text-success'">{{ keep2Decimals(estimatedAmount) }}元</span>
+                        <span v-if="isOffHours" class="text-warning ms-2">周末挂单</span>
                     </div>
 
                     <button class="btn btn-lg" :class="tradeDirection === 'buy' ? 'btn-danger' : 'btn-success'" @click="submitOrder">
@@ -315,25 +322,25 @@
                 </div>
             </div>
         </footer>
-    </div>
 
-    <!-- 订单结果Modal -->
-    <div class="modal fade" id="orderModal" tabindex="-1">
-        <div class="modal-dialog modal-sm modal-dialog-centered">
-            <div class="modal-content" :class="orderResult.success ? 'bg-dark' : 'bg-danger'">
-                <div class="modal-header border-0">
-                    <h5 class="modal-title text-white">{{ orderResult.success ? '下单成功' : '下单失败' }}</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body text-white" v-if="orderResult.success">
-                    <p>{{ orderResult.direction === 'buy' ? '买入' : '卖出' }}成功</p>
-                    <p>股票：{{ orderResult.stock_name }}</p>
-                    <p>价格：{{ keep2Decimals(orderResult.price) }}</p>
-                    <p>数量：{{ orderResult.volume }}股</p>
-                    <p>金额：{{ keep2Decimals(orderResult.amount) }}元</p>
-                </div>
-                <div class="modal-body text-white" v-else>
-                    <p>{{ orderResult.message }}</p>
+        <!-- 订单结果Modal -->
+        <div class="modal fade" id="orderModal" tabindex="-1">
+            <div class="modal-dialog modal-sm modal-dialog-centered">
+                <div class="modal-content" :class="orderResult.success ? 'bg-dark' : 'bg-danger'">
+                    <div class="modal-header border-0">
+                        <h5 class="modal-title text-white">{{ orderResult.success ? '下单成功' : '下单失败' }}</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body text-white" v-if="orderResult.success">
+                        <p>{{ orderResult.direction === 'buy' ? '买入' : '卖出' }}成功</p>
+                        <p>股票：{{ orderResult.stock_name }}</p>
+                        <p>价格：{{ keep2Decimals(orderResult.price) }}</p>
+                        <p>数量：{{ orderResult.volume }}股</p>
+                        <p>金额：{{ keep2Decimals(orderResult.amount) }}元</p>
+                    </div>
+                    <div class="modal-body text-white" v-else>
+                        <p>{{ orderResult.message }}</p>
+                    </div>
                 </div>
             </div>
         </div>
